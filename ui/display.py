@@ -302,3 +302,132 @@ def print_error(message: str):
 
 def print_info(message: str):
     console.print(f"  [info]{message}[/info]")
+
+
+# ── Stufe 3: Interaktive Fix-Ansicht ─────────────────────────────────────────
+
+def _print_diff(diff_lines: list[str]) -> None:
+    """Gibt einen unified diff farbig aus."""
+    if not diff_lines:
+        console.print("  [dim](Keine Änderungen erkannt)[/dim]")
+        return
+
+    for line in diff_lines:
+        if line.startswith("+++") or line.startswith("---"):
+            console.print(f"[dim]{line}[/dim]")
+        elif line.startswith("@@"):
+            console.print(f"[cyan]{line}[/cyan]")
+        elif line.startswith("+"):
+            console.print(f"[green]{line}[/green]")
+        elif line.startswith("-"):
+            console.print(f"[red]{line}[/red]")
+        else:
+            console.print(f"[dim]{line}[/dim]")
+
+
+def interactive_fix_callback(
+    issue,
+    diff_lines:  list[str],
+    apply_fn:    callable,
+    skip_fn:     callable,
+    quit_fn:     callable,
+) -> None:
+    """
+    UI-Callback für stage3_apply_fixes.run_fix_session().
+    Zeigt das Issue + Diff an und fragt den Nutzer nach seiner Entscheidung.
+    """
+    from stages.stage2_ai_review import AIIssue
+
+    sev_style = {"high": "error", "medium": "warning", "low": "cyan"}.get(issue.severity, "white")
+    sev_icon  = {"high": "✖", "medium": "⚠", "low": "ℹ"}.get(issue.severity, "·")
+
+    console.print()
+    console.print(Rule(
+        f"[{sev_style}]{sev_icon}  {issue.title}[/{sev_style}]",
+        style=sev_style,
+    ))
+
+    # Detailansicht des Issues
+    console.print(Panel(
+        f"[bold white]Zeile:[/bold white]      {issue.line if issue.line > 0 else '–'}\n"
+        f"[bold white]Kategorie:[/bold white]  {issue.category}\n"
+        f"[bold white]Schwere:[/bold white]    [{sev_style}]{issue.severity}[/{sev_style}]\n\n"
+        f"[bold white]Erklärung:[/bold white]\n{issue.explanation}\n\n"
+        f"[bold white]Vorschlag:[/bold white]\n[green]{issue.suggestion}[/green]",
+        border_style=sev_style,
+        title="[bold]Problem-Detail[/bold]",
+    ))
+
+    # Diff-Vorschau
+    console.print()
+    console.print(Rule("[bold white]Vorschau der Änderungen[/bold white]", style="dim"))
+    _print_diff(diff_lines)
+    console.print()
+
+    # Nutzer-Eingabe
+    while True:
+        console.print(
+            "  [bold white]Was möchtest du tun?[/bold white]  "
+            "[green]\\[a][/green] Anwenden  "
+            "[yellow]\\[s][/yellow] Überspringen  "
+            "[red]\\[q][/red] Beenden"
+        )
+        try:
+            choice = input("  Eingabe: ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            choice = "q"
+
+        if choice == "a":
+            with console.status("[cyan]Änderung wird angewendet…[/cyan]", spinner="dots"):
+                apply_fn()
+            console.print("  [success]✔  Änderung angewendet.[/success]")
+            break
+        elif choice == "s":
+            skip_fn()
+            console.print("  [dim]→  Übersprungen.[/dim]")
+            break
+        elif choice == "q":
+            quit_fn()
+            console.print("  [warning]⚠  Sitzung beendet.[/warning]")
+            break
+        else:
+            console.print("  [dim]Ungültige Eingabe. Bitte a, s oder q eingeben.[/dim]")
+
+
+def print_fix_session_summary(session) -> None:
+    """Abschluss-Zusammenfassung der Stufe-3-Sitzung."""
+    from stages.stage3_apply_fixes import FixSession
+
+    console.print()
+    console.print(Rule("[bold white]Stufe 3 – Abschluss[/bold white]", style="cyan"))
+    console.print()
+
+    stats = [
+        Panel(
+            f"[success]{session.applied_count}[/success]\n[info]Angewendet[/info]",
+            border_style="green", expand=True
+        ),
+        Panel(
+            f"[dim]{session.skipped_count}[/dim]\n[info]Übersprungen[/info]",
+            border_style="dim", expand=True
+        ),
+        Panel(
+            f"[error]{session.error_count}[/error]\n[info]Fehler[/info]",
+            border_style="red", expand=True
+        ),
+    ]
+    console.print(Columns(stats, equal=True))
+    console.print()
+
+    if session.applied_count > 0:
+        console.print(Panel(
+            f"[success]✔  {session.applied_count} Verbesserung(en) wurden auf die Datei angewendet.[/success]\n"
+            f"[info]Backup gespeichert unter: {session.backup_path}[/info]",
+            border_style="green",
+        ))
+    else:
+        console.print(Panel(
+            "[dim]Keine Änderungen vorgenommen. Die Originaldatei ist unverändert.[/dim]",
+            border_style="dim",
+        ))
+    console.print()

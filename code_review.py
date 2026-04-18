@@ -21,11 +21,14 @@ from ui.display import (
     print_stage_header,
     print_linter_report,
     print_ai_report,
+    print_fix_session_summary,
+    interactive_fix_callback,
     print_error,
     print_info,
 )
 from stages.stage1_linter import run_linter
 from stages.stage2_ai_review import run_ai_review
+from stages.stage3_apply_fixes import run_fix_session
 
 
 # ── CLI-Definition ────────────────────────────────────────────────────────────
@@ -112,7 +115,7 @@ def run_stage2(target: str, linter_report, json_out: str | None):
     print_stage_header(
         2,
         "KI-Analyse (Logik & Verständnis)",
-        "Gemini analysiert Logik, Lesbarkeit und potenzielle Bugs.",
+        "Claude analysiert Logik, Lesbarkeit und potenzielle Bugs.",
     )
 
     try:
@@ -140,13 +143,39 @@ def run_stage2(target: str, linter_report, json_out: str | None):
     return ai_report
 
 
-def run_stage3():
+def run_stage3(target: str, ai_report):
     print_stage_header(
         3,
         "Lösungsvorschlag & Implementierung",
-        "Interaktive Diff-Ansicht mit optionaler Auto-Korrektur.",
+        "Jede Verbesserung einzeln prüfen und direkt auf die Datei anwenden.",
     )
-    console.print("  [dim]→ Stufe 3 wird in Phase 3 implementiert …[/dim]\n")
+
+    # Nur bei Einzeldateien anwendbar
+    from pathlib import Path
+    if Path(target).is_dir():
+        console.print(
+            "  [warning]⚠  Automatisches Anwenden ist nur bei Einzeldateien verfügbar.[/warning]\n"
+        )
+        return
+
+    actionable = [i for i in ai_report.issues if i.line > 0]
+    if not actionable:
+        console.print(
+            "  [dim]→  Keine Issues mit Zeilenbezug – nichts anzuwenden.[/dim]\n"
+        )
+        return
+
+    try:
+        session = run_fix_session(
+            target    = target,
+            ai_report = ai_report,
+            callback  = interactive_fix_callback,
+        )
+    except RuntimeError as e:
+        print_error(str(e))
+        return
+
+    print_fix_session_summary(session)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -183,10 +212,11 @@ def main():
 
     from stages.stage1_linter import run_linter as _rerun
     linter_report = _rerun(str(target_path), select=select_codes)
-    run_stage2(str(target_path), linter_report, args.json_out)
+    ai_report = run_stage2(str(target_path), linter_report, args.json_out)
 
-    # ── Stufe 3 (Platzhalter)
-    run_stage3()
+    # ── Stufe 3
+    if ai_report is not None:
+        run_stage3(str(target_path), ai_report)
 
 
 if __name__ == "__main__":
