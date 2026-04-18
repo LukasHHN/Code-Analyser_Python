@@ -15,6 +15,7 @@ from rich.syntax import Syntax
 from rich.theme import Theme
 
 from stages.stage1_linter import LinterReport, LinterIssue
+from stages.stage2_ai_review import AIReviewReport, AIIssue
 
 # ── Theme ─────────────────────────────────────────────────────────────────────
 
@@ -183,6 +184,101 @@ def print_linter_report(report: LinterReport):
             border_style="yellow"
         ))
     console.print()
+
+# ── KI-Review-Report (Stufe 2) ───────────────────────────────────────────────
+
+def _ai_severity_style(severity: str) -> str:
+    return {"high": "error", "medium": "warning", "low": "cyan"}.get(severity, "white")
+
+
+def _ai_severity_icon(severity: str) -> str:
+    return {"high": "✖", "medium": "⚠", "low": "ℹ"}.get(severity, "·")
+
+
+def _quality_style(quality: str) -> str:
+    return {"good": "success", "medium": "warning", "poor": "error"}.get(quality, "info")
+
+
+def _quality_label(quality: str) -> str:
+    return {"good": "Gut", "medium": "Verbesserungswürdig", "poor": "Kritisch"}.get(quality, "Unbekannt")
+
+
+def print_ai_summary(report: AIReviewReport):
+    """Zeigt die KI-Zusammenfassung und Stat-Kacheln."""
+    q_style = _quality_style(report.overall_quality)
+    q_label = _quality_label(report.overall_quality)
+    console.print(Panel(
+        f"[{q_style}]Gesamtqualität: {q_label}[/{q_style}]\n\n"
+        f"[white]{report.summary}[/white]",
+        title=f"[bold cyan]KI-Analyse  •  {report.model_used}[/bold cyan]",
+        border_style=q_style,
+    ))
+    console.print()
+
+    stats = [
+        Panel(
+            f"[error]{report.high_count}[/error]\n[info]Kritisch[/info]",
+            border_style="red", expand=True
+        ),
+        Panel(
+            f"[warning]{report.medium_count}[/warning]\n[info]Mittel[/info]",
+            border_style="yellow", expand=True
+        ),
+        Panel(
+            f"[cyan]{report.low_count}[/cyan]\n[info]Gering[/info]",
+            border_style="cyan", expand=True
+        ),
+    ]
+    console.print(Columns(stats, equal=True))
+    console.print()
+
+
+def print_ai_issues(report: AIReviewReport):
+    """Gibt die KI-Befunde als Tabelle aus."""
+    if not report.issues:
+        console.print(Panel(
+            "[success]✔  KI hat keine weiteren Probleme gefunden.[/success]",
+            border_style="green"
+        ))
+        return
+
+    table = Table(
+        box=box.ROUNDED,
+        show_header=True,
+        header_style="bold white",
+        border_style="dim",
+        expand=True,
+        show_lines=True,
+    )
+    table.add_column("Zeile",     style="dim",          width=6)
+    table.add_column("Schwere",                          width=10)
+    table.add_column("Kategorie", style="bold magenta", width=14)
+    table.add_column("Problem")
+    table.add_column("Lösung")
+
+    for issue in sorted(report.issues, key=lambda x: (
+        {"high": 0, "medium": 1, "low": 2}.get(x.severity, 3), x.line
+    )):
+        sev_style = _ai_severity_style(issue.severity)
+        icon      = _ai_severity_icon(issue.severity)
+        line_str  = str(issue.line) if issue.line > 0 else "–"
+        table.add_row(
+            line_str,
+            f"[{sev_style}]{icon} {issue.severity}[/{sev_style}]",
+            issue.category,
+            f"[bold white]{issue.title}[/bold white]\n[dim]{issue.explanation}[/dim]",
+            f"[dim]{issue.suggestion}[/dim]",
+        )
+
+    console.print(table)
+    console.print()
+
+
+def print_ai_report(report: AIReviewReport):
+    """Vollständige Ausgabe von Stufe 2."""
+    print_ai_summary(report)
+    print_ai_issues(report)
+
 
 
 # ── Spinner (für spätere Stufen) ──────────────────────────────────────────────

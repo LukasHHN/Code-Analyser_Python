@@ -1,3 +1,3 @@
 ruff>=0.4.0
 rich>=13.7.0
-anthropic>=0.25.0   # wird in Phase 2 benötigt
+anthropic>=0.25.0   # Claude API – Phase 2

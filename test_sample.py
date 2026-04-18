@@ -1,7 +1,7 @@
 """Testdatei mit absichtlichen Fehlern für den Linter-Test."""
 
-import os
 import sys
+import os
 import json  # unused import
 
 # E501: Zeile zu lang
@@ -36,6 +36,7 @@ def fuege_hinzu(element, liste=[]):
 
 
 # UP007: verwende X | Y statt Optional[X]
+# E402: import nicht zu Beginn ausgeführt
 from typing import Optional
 def hole_name(name: Optional[str]) -> Optional[str]:
     return name

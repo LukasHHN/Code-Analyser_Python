@@ -20,10 +20,12 @@ from ui.display import (
     print_banner,
     print_stage_header,
     print_linter_report,
+    print_ai_report,
     print_error,
     print_info,
 )
 from stages.stage1_linter import run_linter
+from stages.stage2_ai_review import run_ai_review
 
 
 # ── CLI-Definition ────────────────────────────────────────────────────────────
@@ -106,13 +108,36 @@ def run_stage1(target: str, select_codes: list[str] | None, json_out: str | None
 
 # ── Platzhalter für spätere Stufen ────────────────────────────────────────────
 
-def run_stage2(target: str, linter_report_path: str | None):
+def run_stage2(target: str, linter_report, json_out: str | None):
     print_stage_header(
         2,
         "KI-Analyse (Logik & Verständnis)",
-        "Claude API prüft Logik, Lesbarkeit und potenzielle Bugs.",
+        "Gemini analysiert Logik, Lesbarkeit und potenzielle Bugs.",
     )
-    console.print("  [dim]→ Stufe 2 wird in Phase 2 implementiert …[/dim]\n")
+
+    try:
+        with console.status("[cyan]KI analysiert Code…[/cyan]", spinner="dots"):
+            ai_report = run_ai_review(target, linter_report)
+    except RuntimeError as e:
+        print_error(str(e))
+        return None
+
+    print_ai_report(ai_report)
+
+    # Optionaler JSON-Export – an bestehenden Report anhängen
+    if json_out:
+        import json
+        from pathlib import Path
+        out_path = Path(json_out)
+        try:
+            existing = json.loads(out_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
+        existing["ai_review"] = ai_report.to_dict()
+        out_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False))
+        print_info(f"KI-Report zu JSON hinzugefügt: {out_path.resolve()}")
+
+    return ai_report
 
 
 def run_stage3():
@@ -148,7 +173,7 @@ def main():
     if args.only_lint:
         sys.exit(0 if stage1_ok else 1)
 
-    # ── Stufe 2 (Platzhalter)
+    # ── Stufe 2
     if not stage1_ok:
         console.print(
             "  [warning]⚠  Kritische Fehler in Stufe 1 gefunden. "
@@ -156,7 +181,9 @@ def main():
         )
         sys.exit(1)
 
-    run_stage2(str(target_path), args.json_out)
+    from stages.stage1_linter import run_linter as _rerun
+    linter_report = _rerun(str(target_path), select=select_codes)
+    run_stage2(str(target_path), linter_report, args.json_out)
 
     # ── Stufe 3 (Platzhalter)
     run_stage3()
