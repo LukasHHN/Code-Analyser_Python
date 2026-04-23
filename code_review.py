@@ -203,13 +203,9 @@ def main():
         sys.exit(0 if stage1_ok else 1)
 
     # ── Stufe 2
-    if not stage1_ok:
-        console.print(
-            "  [warning]⚠  Kritische Fehler in Stufe 1 gefunden. "
-            "Bitte erst beheben, dann Stufe 2 starten.[/warning]\n"
-        )
-        sys.exit(1)
-
+    # Läuft immer – auch wenn Stufe 1 Fehler gefunden hat.
+    # Die Linter-Ergebnisse werden als Kontext mitgeschickt, damit
+    # Claude sie kennt und NICHT dupliziert, sondern nur Logikprobleme angeht.
     from stages.stage1_linter import run_linter as _rerun
     linter_report = _rerun(str(target_path), select=select_codes)
     ai_report = run_stage2(str(target_path), linter_report, args.json_out)

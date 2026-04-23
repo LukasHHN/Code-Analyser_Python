@@ -77,19 +77,22 @@ class AIReviewReport:
 # ── Prompt-Erstellung ─────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """Du bist ein erfahrener Python-Entwickler der Code Reviews durchführt.
-Deine Aufgabe ist es, Python-Code auf folgende Aspekte zu analysieren:
+Du erhältst Python-Code der möglicherweise noch unkorrigierte Linter-Befunde enthält.
+Diese Linter-Befunde (Stil, Formatierung, ungenutzte Importe usw.) sind dir bekannt und
+werden dir explizit mitgeteilt – ignoriere sie vollständig.
+
+Deine Aufgabe ist ausschließlich die Analyse auf:
 - Logikfehler und potenzielle Bugs
-- Lesbarkeit und Wartbarkeit
-- Sicherheitsprobleme
-- Performance-Probleme
-- Verletzung von Python-Best-Practices (über reine Syntax hinaus)
+- Sicherheitsprobleme (z.B. unsichere Eingabeverarbeitung, ungeschützte Ressourcen)
+- Performance-Probleme (z.B. ineffiziente Algorithmen, unnötige Berechnungen)
+- Architektur- und Verständlichkeitsprobleme (z.B. zu hohe Komplexität, unklare Verantwortlichkeiten)
 
-Du erhältst:
-1. Den originalen Python-Quellcode
-2. Die Ergebnisse eines Linters (ruff) aus einer Vorstufe
-
-Fokussiere dich auf Probleme die der Linter NICHT gefunden hat.
-Dupliziere keine Linter-Befunde, sondern gehe tiefer.
+Schreibe KEINEN einzigen Befund der sich mit Linter-Regeln überschneidet.
+Beispiele was du NICHT melden sollst:
+- Ungenutzte Variablen oder Importe
+- Zeilenlänge, Einrückung, Leerzeilen
+- Namenskonventionen
+- Typ-Hinweise (Type Hints)
 
 Antworte AUSSCHLIESSLICH mit einem validen JSON-Objekt.
 Kein erklärender Text, keine Markdown-Backticks, nur reines JSON.
@@ -100,36 +103,41 @@ Das JSON muss exakt diesem Schema folgen:
     {
       "line": <Zeilennummer als Integer, 0 wenn allgemein>,
       "severity": "<high|medium|low>",
-      "category": "<logic|readability|security|performance|style>",
+      "category": "<logic|security|performance|readability>",
       "title": "<kurze Überschrift max 60 Zeichen>",
       "explanation": "<ausführliche Erklärung des Problems>",
       "suggestion": "<konkreter Lösungsvorschlag, gerne mit Code-Beispiel>"
     }
   ],
-  "summary": "<Gesamteinschätzung in 2-3 Sätzen>",
+  "summary": "<Gesamteinschätzung in 2-3 Sätzen, nur bezogen auf Logik/Sicherheit/Performance>",
   "overall_quality": "<good|medium|poor>"
 }
 
-Wenn keine Probleme gefunden werden, gib ein leeres issues-Array zurück."""
+Wenn keine Logik/Sicherheits/Performance-Probleme gefunden werden, gib ein leeres issues-Array zurück."""
 
 
 def _build_user_prompt(source_code: str, linter_report: LinterReport) -> str:
     """Baut den User-Prompt aus Quellcode + Linter-Ergebnissen zusammen."""
-    linter_summary = f"Fehler: {linter_report.error_count}, Warnungen: {linter_report.warning_count}"
     linter_issues_text = "\n".join(
         f"  Zeile {i.line}: [{i.code}] {i.message}"
         for i in linter_report.issues[:20]
-    ) or "  (keine Probleme gefunden)"
+    ) or "  (keine Linter-Probleme gefunden)"
 
-    return f"""=== QUELLCODE ===
-{source_code}
+    total = len(linter_report.issues)
+    errors = linter_report.error_count
+    warnings = linter_report.warning_count
 
-=== LINTER-ERGEBNISSE (ruff) – diese bereits bekannt, nicht duplizieren ===
-{linter_summary}
-{linter_issues_text}
-
-=== AUFGABE ===
-Analysiere den Code und gib dein Review als JSON zurück."""
+    return (
+        "=== PYTHON-QUELLCODE (unverändert, Linter-Issues noch nicht korrigiert) ===\n"
+        + source_code
+        + "\n\n=== BEREITS BEKANNTE LINTER-BEFUNDE – diese vollständig ignorieren ===\n"
+        + f"Anzahl: {total} (Fehler: {errors}, Warnungen: {warnings})\n"
+        + linter_issues_text
+        + "\n\n=== DEINE AUFGABE ===\n"
+        + "Analysiere ausschließlich Logikfehler, Sicherheitsprobleme und Performance-Probleme.\n"
+        + "Die Linter-Befunde oben sind dir nur zur Information – melde sie NICHT erneut.\n"
+        + "Gib dein Review als JSON zurück."
+    )
 
 
 # ── Parsing der Claude-Antwort ────────────────────────────────────────────────
