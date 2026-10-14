@@ -19,26 +19,42 @@ def pruefe_wert(x):
     if x == None:
         return False
     return True
-
-
 # W291: trailing whitespace + E302: fehlende Leerzeile
+
 class MeineKlasse:
+
     def __init__(self):
+
         self.wert = 0   
+
     def setze_wert(self, v):  # E301: fehlende Leerzeile vor Methode
+
         self.wert = v
 
 
+
 # B006: mutable default argument
-def fuege_hinzu(element, liste=[]):
+
+def fuege_hinzu(element, liste=None):
+
+    if liste is None:
+
+        liste = []
+
     liste.append(element)
+
     return liste
 
 
+
 # UP007: verwende X | Y statt Optional[X]
+
 # E402: import nicht zu Beginn ausgeführt
+
 from typing import Optional
+
 def hole_name(name: Optional[str]) -> Optional[str]:
+
     return name
 
 
